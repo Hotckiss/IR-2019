@@ -1,0 +1,1 @@
+Documents count: 1467Average words count: 992.9754601226994Average bytes count: 11809.920245398773Average text/(text+HTML) value: 0.2359268847457029Average text/(text+HTML) value(no comments in HTML): 0.26983798229570083
