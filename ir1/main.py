@@ -4,10 +4,13 @@ from lxml import etree
 import re
 import matplotlib.pyplot as plt
 import math
+import nltk
+from nltk.tokenize import word_tokenize, RegexpTokenizer
+nltk.download('punkt')
 
 DATA_DIR = "data/"
 VOLUME_PREFIX = "byweb."
-
+VOLUMES_COUNT = 10
 class Document:
     def __init__(self, content, url, id, decode=False):
         self.id = id
@@ -28,6 +31,7 @@ class Document:
     def print_text(self):
         print(self.clean_text())
 
+    # can throw exception
     def clean_text(self):
         soup = BeautifulSoup(self.content, 'html.parser')
 
@@ -35,10 +39,12 @@ class Document:
         t = re.sub("(<!--.*?-->)", "", text, flags=re.DOTALL)
         return t
 
+    # can throw exception
     def print_prettify(self):
         soup = BeautifulSoup(self.content, 'html.parser')
         print(soup.prettify())
 
+    # can throw exception
     def make_html(self):
         f = open("res/html/" + "doc_" + str(self.id) + ".html", "w")
         soup = BeautifulSoup(self.content, 'html.parser')
@@ -58,29 +64,39 @@ class Document:
         self.content = base64.b64decode(self.content)
 
 class DocumentStatsCollector:
-    def __init__(self):
+    def __init__(self, remove_punkt=False):
+        self.handled = 0
         self.documents_count = 0
+        self.completed_with_errors = 0
         self.documents_word_lengths = []
         self.documents_byte_html_lengths = []
         self.documents_byte_html_no_comments_lengths = []
         self.documents_byte_text_lengths = []
+        self.remove_punkt = remove_punkt
 
     def handle(self, document):
+        self.handled += 1
+        print(str(self.handled) + " docs handled...")
+
+        try:
+            clean_text = document.clean_text()
+        except:
+            self.completed_with_errors += 1
+            return
+
         self.documents_count += 1
         self.documents_byte_html_lengths.append(len(document.content.encode("utf-8")))
         no_comments_text = re.sub("(<!--.*?-->)", "", document.content, flags=re.DOTALL)
         self.documents_byte_html_no_comments_lengths.append(len(no_comments_text.encode("utf-8")))
-        text = document.clean_text()
-        self.documents_byte_text_lengths.append(len(text.encode("utf-8")))
-        self.documents_word_lengths.append(len(text.split()))
+
+        if self.remove_punkt:
+            tokenizer = RegexpTokenizer(r'\w+')
+            clean_text = " ".join(tokenizer.tokenize(clean_text))
+        self.documents_byte_text_lengths.append(len(clean_text.encode("utf-8")))
+        self.documents_word_lengths.append(len(clean_text.split()))
+
 
     def stats(self):
-        print("Documents count: " + str(self.documents_count))
-        print("Average words count: " + str(sum(self.documents_word_lengths) / self.documents_count))
-        print("Average bytes count: " + str(sum(self.documents_byte_text_lengths) / self.documents_count))
-        print("Average text/(text+HTML) value: " + str(sum(self.documents_byte_text_lengths) / sum(self.documents_byte_html_lengths)))
-        print("Average text/(text+HTML) value(no comments in HTML): " + str(sum(self.documents_byte_text_lengths) / sum(self.documents_byte_html_no_comments_lengths)))
-
         bounds_words = [2000, 10000, 0xffffffff]
         bounds_bytes = [20000, 50000, 0xffffffff]
 
@@ -99,11 +115,11 @@ class DocumentStatsCollector:
         plot_hist(th_ratio, "th_ratio_distribution_no_comments")
 
         f = open("res/task_1_summary.txt", "w")
-        f.write("Documents count: " + str(self.documents_count))
-        f.write("Average words count: " + str(sum(self.documents_word_lengths) / self.documents_count))
-        f.write("Average bytes count: " + str(sum(self.documents_byte_text_lengths) / self.documents_count))
-        f.write("Average text/(text+HTML) value: " + str(sum(self.documents_byte_text_lengths) / sum(self.documents_byte_html_lengths)))
-        f.write("Average text/(text+HTML) value(no comments in HTML): " + str(sum(self.documents_byte_text_lengths) / sum(self.documents_byte_html_no_comments_lengths)))
+        f.write("Documents count: " + str(self.documents_count + self.completed_with_errors) + "\n")
+        f.write("Average words count: " + str(sum(self.documents_word_lengths) / self.documents_count) + "\n")
+        f.write("Average bytes count: " + str(sum(self.documents_byte_text_lengths) / self.documents_count) + "\n")
+        f.write("Average text/(text+HTML) value: " + str(sum(self.documents_byte_text_lengths) / sum(self.documents_byte_html_lengths)) + "\n")
+        f.write("Average text/(text+HTML) value(no comments in HTML): " + str(sum(self.documents_byte_text_lengths) / sum(self.documents_byte_html_no_comments_lengths)) + "\n")
         f.close()
 
 
@@ -111,26 +127,6 @@ def plot_hist(data, file_name, cols_num=20):
     plt.clf()
     plt.hist(data, cols_num)
     plt.savefig("res/plots/" + file_name + ".png")
-
-
-def extract_documents(file_name, decode=False):
-    xml_tree = etree.parse(DATA_DIR + file_name + ".xml")
-    root = xml_tree.getroot()
-    documents = []
-    for document in root.getchildren():
-        content, url, id = "", "", ""
-
-        for property in document.getchildren():
-            if property.tag == 'docID':
-                id = property.text
-            elif property.tag == 'docURL':
-                url = property.text
-            else:
-                content = property.text
-
-        documents.append(Document(content, url, id, decode=decode))
-
-    return documents
 
 
 def process_documents(file_name, handler):
@@ -146,16 +142,15 @@ def process_documents(file_name, handler):
                 url = property.text
             else:
                 content = property.text
-        if int(id) > 10000:
-            break
+
         document = Document(content, url, id, decode=True)
         handler.handle(document)
 
 
 if __name__ == '__main__':
-    stats_collector = DocumentStatsCollector()
-    for volume in range(1):
-        print("Process volume " + str(volume))
+    stats_collector = DocumentStatsCollector(remove_punkt=False)
+    for volume in range(VOLUMES_COUNT):
+        print("Process volume " + str(volume + 1) + "...")
         process_documents(VOLUME_PREFIX + str(volume), stats_collector)
 
     stats_collector.stats()
