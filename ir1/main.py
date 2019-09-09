@@ -6,14 +6,18 @@ import matplotlib.pyplot as plt
 import math
 import nltk
 from nltk.tokenize import word_tokenize, RegexpTokenizer
+import html5lib
 nltk.download('punkt')
 
 DATA_DIR = "data/"
 VOLUME_PREFIX = "byweb."
 VOLUMES_COUNT = 10
+
+
 class Document:
-    def __init__(self, content, url, id, decode=False):
+    def __init__(self, content, url, id, parser='html.parser', decode=False):
         self.id = id
+        self.parser = parser
         if decode:
             self.url = base64.urlsafe_b64decode(url).decode("cp1251")
             self.content = base64.b64decode(content).decode("cp1251")
@@ -33,7 +37,7 @@ class Document:
 
     # can throw exception
     def clean_text(self):
-        soup = BeautifulSoup(self.content, 'html.parser')
+        soup = BeautifulSoup(self.content, self.parser)
 
         text = soup.get_text(" ", strip=True)
         t = re.sub("(<!--.*?-->)", "", text, flags=re.DOTALL)
@@ -41,13 +45,40 @@ class Document:
 
     # can throw exception
     def print_prettify(self):
-        soup = BeautifulSoup(self.content, 'html.parser')
+        soup = BeautifulSoup(self.content, self.parser)
         print(soup.prettify())
+
+    # can throw exception
+    def print_links(self):
+        soup = BeautifulSoup(self.content, self.parser)
+        for link in soup.find_all('a'):
+            href = link.get('href')
+            if href is not None:
+                print(href)
+
+    # can throw exception
+    def save_links(self, file_name):
+        soup = BeautifulSoup(self.content, self.parser)
+        links = []
+
+        for link in soup.find_all('a'):
+            href = link.get('href')
+            if href is not None and len(href) > 0:
+                cleaned_href = href.replace('\n', '').replace('\t', '').replace('\r', '')
+                links.append(cleaned_href)
+
+        f = open(file_name, "a")
+        f.write(self.id + "\n")
+        f.write(self.url + "\n")
+        f.write(str(len(links)) + "\n")
+        for link in links:
+            f.write(link + "\n")
+        f.close()
 
     # can throw exception
     def make_html(self):
         f = open("res/html/" + "doc_" + str(self.id) + ".html", "w")
-        soup = BeautifulSoup(self.content, 'html.parser')
+        soup = BeautifulSoup(self.content, self.parser)
         f.write(soup.prettify())
         f.close()
 
@@ -62,6 +93,7 @@ class Document:
     def decode(self):
         self.url = base64.urlsafe_b64decode(self.url)
         self.content = base64.b64decode(self.content)
+
 
 class DocumentStatsCollector:
     def __init__(self, remove_punkt=False):
@@ -95,7 +127,6 @@ class DocumentStatsCollector:
         self.documents_byte_text_lengths.append(len(clean_text.encode("utf-8")))
         self.documents_word_lengths.append(len(clean_text.split()))
 
-
     def stats(self):
         bounds_words = [2000, 10000, 0xffffffff]
         bounds_bytes = [20000, 50000, 0xffffffff]
@@ -111,15 +142,18 @@ class DocumentStatsCollector:
         th_ratio = [a / b for a, b in zip(self.documents_byte_text_lengths, self.documents_byte_html_lengths)]
         plot_hist(th_ratio, "th_ratio_distribution")
 
-        th_ratio = [a / b for a, b in zip(self.documents_byte_text_lengths, self.documents_byte_html_no_comments_lengths)]
+        th_ratio = [a / b for a, b in
+                    zip(self.documents_byte_text_lengths, self.documents_byte_html_no_comments_lengths)]
         plot_hist(th_ratio, "th_ratio_distribution_no_comments")
 
         f = open("res/task_1_summary.txt", "w")
         f.write("Documents count: " + str(self.documents_count + self.completed_with_errors) + "\n")
         f.write("Average words count: " + str(sum(self.documents_word_lengths) / self.documents_count) + "\n")
         f.write("Average bytes count: " + str(sum(self.documents_byte_text_lengths) / self.documents_count) + "\n")
-        f.write("Average text/(text+HTML) value: " + str(sum(self.documents_byte_text_lengths) / sum(self.documents_byte_html_lengths)) + "\n")
-        f.write("Average text/(text+HTML) value(no comments in HTML): " + str(sum(self.documents_byte_text_lengths) / sum(self.documents_byte_html_no_comments_lengths)) + "\n")
+        f.write("Average text/(text+HTML) value: " + str(
+            sum(self.documents_byte_text_lengths) / sum(self.documents_byte_html_lengths)) + "\n")
+        f.write("Average text/(text+HTML) value(no comments in HTML): " + str(
+            sum(self.documents_byte_text_lengths) / sum(self.documents_byte_html_no_comments_lengths)) + "\n")
         f.close()
 
 
@@ -132,7 +166,9 @@ def plot_hist(data, file_name, cols_num=20):
 def process_documents(file_name, handler):
     xml_tree = etree.parse(DATA_DIR + file_name + ".xml")
     root = xml_tree.getroot()
+    cnt = 0
     for document in root.getchildren():
+        cnt += 1
         content, url, id = "", "", ""
 
         for property in document.getchildren():
@@ -143,7 +179,7 @@ def process_documents(file_name, handler):
             else:
                 content = property.text
 
-        document = Document(content, url, id, decode=True)
+        document = Document(content, url, id, parser='lxml', decode=True)
         handler.handle(document)
 
 
