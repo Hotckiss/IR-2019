@@ -1,3 +1,4 @@
+pymystem3
 networkx
 beautifulsoup4
 lxml

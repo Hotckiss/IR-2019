@@ -26,6 +26,7 @@ def process_volume(vl):
     print("Process volume " + str(volume + 1) + "...")
     process_documents(VOLUME_PREFIX + str(volume), builder)
 
+
 def merge_files():
     with open("res/links/graph.txt", 'w') as outfile:
         for volume in range(VOLUMES_COUNT):

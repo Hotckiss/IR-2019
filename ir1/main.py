@@ -1,5 +1,5 @@
 import base64
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Comment
 from lxml import etree
 import re
 import matplotlib.pyplot as plt
@@ -38,6 +38,17 @@ class Document:
     # can throw exception
     def clean_text(self):
         soup = BeautifulSoup(self.content, self.parser)
+
+        [x.extract() for x in soup.find_all('script')]
+        [x.extract() for x in soup.find_all('style')]
+        [x.extract() for x in soup.find_all('meta')]
+        [x.extract() for x in soup.find_all('noscript')]
+        [x.extract() for x in soup.find_all('head')]
+        [x.extract() for x in soup.find_all('[document]')]
+        [x.extract() for x in soup.find_all('title')]
+        [x.extract() for x in soup.find_all('script')]
+        [x.extract() for x in soup.find_all('tag')]
+        [x.extract() for x in soup.find_all(text=lambda text: isinstance(text, Comment))]
 
         text = soup.get_text(" ", strip=True)
         t = re.sub("(<!--.*?-->)", "", text, flags=re.DOTALL)
@@ -163,12 +174,12 @@ def plot_hist(data, file_name, cols_num=20):
     plt.savefig("res/plots/" + file_name + ".png")
 
 
-def process_documents(file_name, handler):
+def process_documents(file_name, handler, limit=None):
     xml_tree = etree.parse(DATA_DIR + file_name + ".xml")
     root = xml_tree.getroot()
-    cnt = 0
+    processed = 0
+
     for document in root.getchildren():
-        cnt += 1
         content, url, id = "", "", ""
 
         for property in document.getchildren():
@@ -181,6 +192,10 @@ def process_documents(file_name, handler):
 
         document = Document(content, url, id, parser='lxml', decode=True)
         handler.handle(document)
+
+        processed += 1
+        if limit is not None and processed >= limit:
+            break
 
 
 if __name__ == '__main__':
