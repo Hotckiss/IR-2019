@@ -49,11 +49,14 @@ class CollectionDictionary:
     def mean_word_len(self):
         return self.words_len_count / len(self.dict.keys())
 
-    def most_freq(self, n):
-        return list(reversed(sorted(self.dict.items(), key=lambda kv: kv[1])))[:n]
+    def most_freq(self):
+        return list(reversed(sorted(self.dict.items(), key=lambda kv: kv[1])))
 
-    def most_freq_values(self, n):
-        return list(map(lambda pair: pair[1], list(reversed(sorted(self.dict.items(), key=lambda kv: kv[1])))))[:n]
+    def most_freq_values(self):
+        return list(map(lambda pair: pair[1], list(reversed(sorted(self.dict.items(), key=lambda kv: kv[1])))))
+
+    def total_count(self):
+        return sum(list(map(lambda pair: pair[1], list(reversed(sorted(self.dict.items(), key=lambda kv: kv[1]))))))
 
 class MyStemHandler:
     def __init__(self, log_debug=False):
@@ -86,7 +89,7 @@ class MyStemHandler:
                   and token.find("\r") == -1 \
                   and token.find("\n") == -1 \
                   and token.find("\t") == -1 \
-                  and not token.isdigit()]
+                  and not (token.isdigit() and len(token) == 1)]
 
         self.collection_words_count += len(tokens)
         for token in tokens:
@@ -127,22 +130,24 @@ class MyStemHandler:
 
         # 5
         top_n = 10000
-        top_dict = self.dictionary.most_freq(top_n)
+        top_dict = self.dictionary.most_freq()
         f.write("Top words from dict (cf):" + "\n")
+        total_count = self.dictionary.total_count()
         for word in top_dict:
-            f.write(str(word[0]) + " " + str(word[1]) + "\n")
+            f.write(str(word[0]) + " " + str(word[1] / total_count) + "\n")
 
         # 6
-        top_dict_idf = list(reversed(sorted(self.idf.items(), key=lambda kv: kv[1].size())))[:top_n]
+        top_dict_idf = list(reversed(sorted(self.idf.items(), key=lambda kv: kv[1].size())))
         f.write("Top words from dict (idf):" + "\n")
         for word in top_dict_idf:
-            f.write(str(word[0]) + " " + str(word[1].size()) + "\n")
+            f.write(str(word[0]) + " " + str(math.log10(self.handled / word[1].size())) + "\n")
 
         # 7
 
         plt.clf()
-        x = range(top_n)
-        y = [math.log2(a) for a in self.dictionary.most_freq_values(top_n)]
+        vals = self.dictionary.most_freq_values()[:top_n]
+        x = [math.log2(a) for a in range(1, len(vals) + 1)]
+        y = [math.log2(a) for a in vals]
         plt.plot(x, y)
         plt.savefig("res/plots/rank_freq.png")
 
